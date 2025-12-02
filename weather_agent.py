@@ -14,16 +14,30 @@ load_dotenv()
 def create_weather_agent():
     """Create and return a weather checking agent."""
     
+    # Check for GitHub token first (for Codespaces)
+    github_token = os.getenv("GITHUB_TOKEN")
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key or api_key == "your-api-key-here":
-        raise ValueError("OPENAI_API_KEY not found in environment variables.")
     
-    # Initialize the LLM
-    llm = ChatOpenAI(
-        model="gpt-3.5-turbo",
-        temperature=0,
-        api_key=api_key
-    )
+    if github_token:
+        # Use GitHub Models API (available in Codespaces)
+        llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            base_url="https://models.inference.ai.azure.com",
+            api_key=github_token
+        )
+        print("✓ Using GitHub Models API")
+    elif api_key and api_key != "your-api-key-here":
+        # Fall back to OpenAI
+        llm = ChatOpenAI(
+            model="gpt-3.5-turbo",
+            temperature=0,
+            api_key=api_key
+        )
+        print("✓ Using OpenAI API")
+    else:
+        raise ValueError("No API key found. Set GITHUB_TOKEN (for Codespaces) or OPENAI_API_KEY in environment variables.")
+    
+    llm.temperature = 0
     
     # Define the weather tool using decorator
     @tool
@@ -35,11 +49,7 @@ def create_weather_agent():
     tools = [weather_tool]
     
     # Create the agent using LangGraph
-    agent = create_react_agent(
-        llm,
-        tools,
-        state_modifier="You are a helpful weather assistant for US cities only. You can check weather information for cities in the United States using the available tools. If a user asks about weather in non-US cities, politely inform them that you only provide weather information for US cities. Provide clear and concise weather information."
-    )
+    agent = create_react_agent(llm, tools)
     
     return agent
 
