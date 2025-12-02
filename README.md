@@ -1,6 +1,6 @@
 # Weather Agent with LangChain
 
-A LangChain-based agent that can check weather information for US cities using natural language queries.
+A LangChain-based agent that can check weather information for US cities using natural language queries. Works with GitHub Models API in Codespaces or OpenAI API.
 
 ## Features
 
@@ -10,13 +10,15 @@ A LangChain-based agent that can check weather information for US cities using n
 - 🛠️ Custom weather tool using Open-Meteo API (free, no API key required)
 - 📊 Current temperature, humidity, wind speed, and weather conditions
 - ⚡ Fast and efficient agent execution
+- 🆓 **Free in Codespaces** - Uses GitHub Models API automatically
+- 📱 Interactive command-line interface
 
 ## Project Structure
 
 ```
 ├── weather_tool.py      # Weather fetching tool using Open-Meteo API
-├── weather_agent.py     # LangChain agent implementation
-├── test_weather_tool.py # Test script for the weather tool
+├── weather_agent.py     # LangChain agent for standalone weather queries
+├── interactive_agent.py # Interactive command-line weather agent
 ├── requirements.txt     # Python dependencies
 ├── .env.example         # Environment variables template
 └── README.md           # This file
@@ -24,55 +26,66 @@ A LangChain-based agent that can check weather information for US cities using n
 
 ## Installation
 
-1. **Clone the repository and navigate to the project directory:**
-   ```bash
-   cd /workspaces/ai-agent-poc
-   ```
-
-2. **Install dependencies:**
+1. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Set up environment variables:**
+2. **Set up environment (optional for Codespaces):**
    ```bash
    cp .env.example .env
    ```
    
-   Then edit `.env` and add your OpenAI API key:
-   ```
-   OPENAI_API_KEY=your_actual_api_key_here
-   ```
+   - **In GitHub Codespaces**: No setup needed! Uses `GITHUB_TOKEN` automatically
+   - **Locally**: Add your OpenAI API key to `.env`:
+     ```
+     OPENAI_API_KEY=your_actual_api_key_here
+     ```
 
 ## Usage
 
-### Option 1: Test the Weather Tool Directly
+### Option 1: Interactive Weather Agent
 
 ```bash
-python test_weather_tool.py
+python interactive_agent.py
 ```
 
-This will fetch weather information for multiple cities using the weather tool directly.
+This starts an interactive command-line interface where you can ask weather questions. Type `quit` or `exit` to leave.
 
-### Option 2: Run the LangChain Agent
+Example:
+```
+You: What's the weather in New York?
+Agent: The weather in New York is currently...
+
+You: Tell me about Chicago
+Agent: Chicago is experiencing...
+
+You: exit
+Goodbye! 👋
+```
+
+### Option 2: Standalone Weather Agent
 
 ```bash
 python weather_agent.py
 ```
 
-This will run the agent with example queries. The agent uses natural language to understand your request and fetch weather information.
+This runs the agent with predefined example queries and displays weather information for multiple US cities.
 
 ### Option 3: Use the Agent in Your Code
 
 ```python
-from weather_agent import create_weather_agent
+from interactive_agent import create_weather_agent
 
 # Create the agent
 agent = create_weather_agent()
 
 # Ask a question
-response = agent.invoke({"input": "What's the weather in Paris?"})
-print(response['output'])
+response = agent.invoke({"messages": [{"role": "user", "content": "What's the weather in New York?"}]})
+
+# Extract response
+last_message = response["messages"][-1]
+print(last_message.content)
 ```
 
 ## Components
@@ -84,12 +97,21 @@ print(response['output'])
 - Fetches current weather data (temperature, humidity, wind speed, conditions)
 - Maps weather codes to human-readable descriptions
 
-### LangChain Agent (`weather_agent.py`)
+### Weather Agent (`weather_agent.py`)
 
-- **LLM**: GPT-3.5-turbo from OpenAI
+- Standalone script for weather queries
+- **LLM**: GitHub Models API (gpt-4o-mini) in Codespaces, or GPT-3.5-turbo from OpenAI
 - **Tool**: Custom weather tool wrapped as a LangChain Tool
-- **Agent Type**: Tool-calling agent with error handling
-- **Prompt**: System prompt instructing the agent to be a helpful weather assistant
+- **Agent Type**: Reactive agent with error handling
+- Runs predefined example queries
+
+### Interactive Agent (`interactive_agent.py`)
+
+- Command-line interface for interactive weather queries
+- **LLM**: GitHub Models API (gpt-4o-mini) in Codespaces, or GPT-3.5-turbo from OpenAI
+- **Tool**: Custom weather tool wrapped as a LangChain Tool
+- Accepts user input in a loop until user exits
+- Shows which API is being used on startup
 
 ## Example Interactions
 
@@ -111,15 +133,31 @@ Agent: Sorry, 'London' is not a US city. This weather agent only provides
        weather information for US cities. Please enter a US city name.
 ```
 
+## API Support
+
+### GitHub Models (Codespaces - Free)
+- **Model**: gpt-4o-mini
+- **Endpoint**: https://models.inference.ai.azure.com
+- **Authentication**: Uses `GITHUB_TOKEN` (automatically available in Codespaces)
+- **Cost**: Free
+
+### OpenAI (Local Development)
+- **Model**: gpt-3.5-turbo
+- **Authentication**: Requires `OPENAI_API_KEY` in `.env`
+- **Cost**: Paid
+
+The agents automatically detect and use the appropriate API based on available credentials.
+
 ## Dependencies
+## Notes
 
-- **langchain**: LLM framework
-- **langchain-community**: Community tools and integrations
-- **langchain-openai**: OpenAI integration
-- **openai**: OpenAI API client
-- **python-dotenv**: Environment variable management
-- **requests**: HTTP requests library
-
+- The weather tool is **restricted to US cities only** - any attempt to get weather for non-US cities will be rejected
+- The agent will automatically inform users about the US-only restriction
+- The weather tool uses the free **Open-Meteo API**, which doesn't require authentication
+- **In GitHub Codespaces**: Uses GitHub Models API automatically (no API key needed!)
+- **Locally**: Requires an OpenAI API key for the GPT-3.5-turbo model
+- Weather data is based on current conditions and is real-time
+- LangGraph v1.0+ uses `create_react_agent` which may show deprecation warnings (code still works)
 ## API References
 
 - **Open-Meteo Geocoding API**: https://open-meteo.com/en/docs/geocoding-api
@@ -135,6 +173,14 @@ Agent: Sorry, 'London' is not a US city. This weather agent only provides
 - The LangChain agent requires an OpenAI API key for the GPT-3.5-turbo model
 - Weather data is based on current conditions and is real-time
 - The agent will retry up to 3 times if there are parsing errors
+## Running in GitHub Codespaces
+
+This project is optimized for GitHub Codespaces:
+
+1. Open in Codespaces
+2. Install dependencies: `pip install -r requirements.txt`
+3. Run: `python interactive_agent.py`
+4. That's it! Uses your GitHub token automatically - no API keys needed!
 
 ## Future Enhancements
 
@@ -143,4 +189,6 @@ Agent: Sorry, 'London' is not a US city. This weather agent only provides
 - Add air quality information
 - Support for multiple cities in a single query
 - Add weather comparison between cities
+- Implement response caching to reduce API calls
+- Update to use latest LangChain agents module
 - Implement response caching to reduce API calls
