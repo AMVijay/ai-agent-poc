@@ -59,8 +59,9 @@ def create_weather_agent():
         ]
         
         has_weather = any(kw in user_lower for kw in weather_keywords)
-        # Match city names in any case: lowercase, UPPERCASE, Capitalized, or camelCase
-        has_city = bool(re.search(r'\b[a-zA-Z]+\b', user_query))
+        # Check for capitalized word (city name) OR any word after "in"/"about"
+        # More lenient: look for words after in/about, even with punctuation
+        has_city = bool(re.search(r'\b[A-Z][a-z]*\b', user_query)) or bool(re.search(r'(?:in|about)\s+([a-z]+)', user_lower))
         
         if not has_weather:
             return "invalid: Query doesn't mention weather"

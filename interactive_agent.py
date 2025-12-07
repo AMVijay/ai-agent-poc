@@ -50,7 +50,7 @@ def create_weather_agent():
     @tool
     def validate_weather_query(user_query: str) -> str:
         """CRITICAL: Always call this tool first to validate if query is about weather in a US city.
-        Returns 'valid' if query mentions weather keywords AND has a US city name, otherwise 'invalid'."""
+        Returns 'valid' if query mentions weather keywords AND has a word that could be a city name, otherwise 'invalid'."""
         user_lower = user_query.lower()
         
         # Weather keywords
@@ -60,8 +60,10 @@ def create_weather_agent():
         ]
         
         has_weather = any(kw in user_lower for kw in weather_keywords)
-        # Match city names in any case: lowercase, UPPERCASE, Capitalized, or camelCase
-        has_city = bool(re.search(r'\b[a-zA-Z]+\b', user_query))
+        
+        # Check for capitalized word (city name) OR any word after "in"/"about"
+        # More lenient: look for words after in/about, even with punctuation
+        has_city = bool(re.search(r'\b[A-Z][a-z]*\b', user_query)) or bool(re.search(r'(?:in|about)\s+([a-z]+)', user_lower))
         
         if not has_weather:
             return "invalid: Query doesn't mention weather"
