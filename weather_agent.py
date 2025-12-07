@@ -6,6 +6,7 @@ import warnings
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
+from langchain_core.messages import SystemMessage
 from langgraph.prebuilt import create_react_agent
 from weather_tool import get_weather
 
@@ -14,18 +15,6 @@ warnings.filterwarnings("ignore", message="create_react_agent has been moved")
 
 # Load environment variables
 load_dotenv()
-
-
-def _is_weather_query(user_query: str) -> bool:
-    """Internal helper to check if query is about weather in a US city."""
-    user_lower = user_query.lower()
-    weather_keywords = [
-        'weather', 'temperature', 'temp', 'condition', 'humidity', 'wind',
-        'rain', 'snow', 'sunny', 'cloudy', 'forecast', 'hot', 'cold'
-    ]
-    has_weather = any(kw in user_lower for kw in weather_keywords)
-    has_city = bool(re.search(r'\b[A-Z][a-z]+\b', user_query))
-    return has_weather and has_city
 
 
 def create_weather_agent():
@@ -70,7 +59,8 @@ def create_weather_agent():
         ]
         
         has_weather = any(kw in user_lower for kw in weather_keywords)
-        has_city = bool(re.search(r'\b[A-Z][a-z]+\b', user_query))
+        # Match city names in any case: lowercase, UPPERCASE, Capitalized, or camelCase
+        has_city = bool(re.search(r'\b[a-zA-Z]+\b', user_query))
         
         if not has_weather:
             return "invalid: Query doesn't mention weather"
@@ -84,11 +74,23 @@ def create_weather_agent():
         """Get current weather information for a US city. Only use this after validate_weather_query returns 'valid'."""
         return get_weather(city)
     
+    # System prompt that enforces validation
+    def make_prompt(state):
+        """Create prompt with system message."""
+        system_msg = SystemMessage(content="""You are a weather assistant. You MUST follow these rules:
+
+1. ALWAYS call validate_weather_query tool FIRST for every user query
+2. Only if validate_weather_query returns 'valid', then use weather_tool to get the weather
+3. If validate_weather_query returns 'invalid', respond: "I only answer questions about weather in US cities. Please ask about the weather in a specific US city."
+4. Do NOT answer any other questions - refuse politely and remind the user about the weather-only scope
+5. Do NOT make assumptions or bypass the validation tool""")
+        return [system_msg] + state["messages"]
+    
     # Create tool list - validation tool first
     tools = [validate_weather_query, weather_tool]
     
     # Create the agent using create_react_agent from langgraph
-    agent = create_react_agent(llm, tools)
+    agent = create_react_agent(llm, tools, prompt=make_prompt)
     
     return agent
 
@@ -114,14 +116,8 @@ def main():
         print(f"\nUser: {query}")
         print("-" * 50)
         
-        # Client-side validation to enforce restriction
-        if not _is_weather_query(query):
-            print("Agent: I only answer questions about weather in US cities.")
-            print("-" * 50)
-            continue
-        
         try:
-            # Invoke the agent - validate_weather_query tool is available as a backup
+            # Invoke the agent (validation is handled by the agent itself)
             result = agent.invoke({"messages": [{"role": "user", "content": query}]})
             
             # Extract and display the output
