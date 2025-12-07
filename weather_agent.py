@@ -2,52 +2,30 @@
 
 import os
 import re
+import warnings
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
 from weather_tool import get_weather
 
+# Suppress the deprecation warning from LangGraph
+warnings.filterwarnings("ignore", message="create_react_agent has been moved")
+
 # Load environment variables
 load_dotenv()
 
 
-def is_weather_query(user_input: str) -> tuple[bool, str]:
-    """
-    Validate if the user input is a weather-related query about a city.
-    Returns (is_valid, message)
-    """
-    user_lower = user_input.lower()
-    
-    # Keywords that indicate weather-related queries
+def _is_weather_query(user_query: str) -> bool:
+    """Internal helper to check if query is about weather in a US city."""
+    user_lower = user_query.lower()
     weather_keywords = [
-        'weather', 'temperature', 'temp', 'cold', 'hot', 'humid', 'humidity',
-        'wind', 'rain', 'snow', 'sunny', 'cloudy', 'forecast', 'condition',
-        'climate', 'degrees', 'fahrenheit', 'celsius', 'precipitation',
-        'how is it', "what's it like", 'how is the weather', 'tell me about'
+        'weather', 'temperature', 'temp', 'condition', 'humidity', 'wind',
+        'rain', 'snow', 'sunny', 'cloudy', 'forecast', 'hot', 'cold'
     ]
-    
-    # Check if input contains weather keywords
-    has_weather_keyword = any(keyword in user_lower for keyword in weather_keywords)
-    
-    # Check if input mentions a city (has proper nouns or city names)
-    city_pattern = r'\b[A-Z][a-z]+\b|new york|los angeles|san francisco|san diego'
-    has_city = bool(re.search(city_pattern, user_input))
-    
-    # Math/calculation detection
-    math_pattern = r'^[0-9\s\+\-\*/\(\)]+$'
-    is_math = bool(re.match(math_pattern, user_input.replace('?', '')))
-    
-    if is_math:
-        return False, "I only answer weather-related questions. Please ask about the weather in a US city!"
-    
-    if not has_weather_keyword:
-        return False, "I'm a weather assistant. Please ask about weather conditions in a US city."
-    
-    if not has_city:
-        return False, "Please specify a US city in your query."
-    
-    return True, ""
+    has_weather = any(kw in user_lower for kw in weather_keywords)
+    has_city = bool(re.search(r'\b[A-Z][a-z]+\b', user_query))
+    return has_weather and has_city
 
 
 def create_weather_agent():
@@ -78,16 +56,38 @@ def create_weather_agent():
     
     llm.temperature = 0
     
+    # Define the validation tool
+    @tool
+    def validate_weather_query(user_query: str) -> str:
+        """CRITICAL: Always call this tool first to validate if query is about weather in a US city.
+        Returns 'valid' if query mentions weather keywords AND has a US city name, otherwise 'invalid'."""
+        user_lower = user_query.lower()
+        
+        # Weather keywords
+        weather_keywords = [
+            'weather', 'temperature', 'temp', 'condition', 'humidity', 'wind',
+            'rain', 'snow', 'sunny', 'cloudy', 'forecast', 'hot', 'cold'
+        ]
+        
+        has_weather = any(kw in user_lower for kw in weather_keywords)
+        has_city = bool(re.search(r'\b[A-Z][a-z]+\b', user_query))
+        
+        if not has_weather:
+            return "invalid: Query doesn't mention weather"
+        if not has_city:
+            return "invalid: No US city mentioned in query"
+        return "valid"
+    
     # Define the weather tool using decorator
     @tool
     def weather_tool(city: str) -> str:
-        """Get current weather information for a US city only. Input should be a US city name."""
+        """Get current weather information for a US city. Only use this after validate_weather_query returns 'valid'."""
         return get_weather(city)
     
-    # Create tool list
-    tools = [weather_tool]
+    # Create tool list - validation tool first
+    tools = [validate_weather_query, weather_tool]
     
-    # Create the agent using LangGraph
+    # Create the agent using create_react_agent from langgraph
     agent = create_react_agent(llm, tools)
     
     return agent
@@ -114,25 +114,31 @@ def main():
         print(f"\nUser: {query}")
         print("-" * 50)
         
-        # Validate if the query is weather-related about a city
-        is_valid, error_message = is_weather_query(query)
-        if not is_valid:
-            print(f"Agent: {error_message}")
+        # Client-side validation to enforce restriction
+        if not _is_weather_query(query):
+            print("Agent: I only answer questions about weather in US cities.")
             print("-" * 50)
             continue
         
         try:
-            response = agent.invoke({"messages": [{"role": "user", "content": query}]})
-            if "messages" in response:
-                last_message = response["messages"][-1]
-                if hasattr(last_message, 'content'):
-                    print(f"Agent: {last_message.content}")
+            # Invoke the agent - validate_weather_query tool is available as a backup
+            result = agent.invoke({"messages": [{"role": "user", "content": query}]})
+            
+            # Extract and display the output
+            if "messages" in result:
+                last_msg = result["messages"][-1]
+                if hasattr(last_msg, 'content'):
+                    print(f"Agent: {last_msg.content}")
                 else:
-                    print(f"Agent: {str(last_message)}")
+                    print(f"Agent: {last_msg}")
+            else:
+                print(f"Agent: {result}")
         except Exception as e:
             print(f"Error: {str(e)}")
+        print("-" * 50)
         print("-" * 50)
 
 
 if __name__ == "__main__":
     main()
+
